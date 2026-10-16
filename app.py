@@ -314,9 +314,10 @@ with about_tab:
     st.markdown(
         "- OPP-115 policies were collected around 2015 and do not represent current policies or all jurisdictions.\n"
         "- The target categories are mapped directly from OPP-115 categories; a predicted category is not a legal risk rating.\n"
-- The model must choose among the seven supported categories; there is no 'other/none' class, so out-of-scope text can be assigned the closest available topic.\n"
+        "- The model must choose among the seven supported categories; there is no 'other/none' class, so out-of-scope text can be assigned the closest available topic.\n"
         "- Clause-level classification can miss context, negation, exceptions, and layout or PDF extraction errors.\n"
         "- Confidence scores are not calibrated and findings need human verification against the evidence shown.\n"
-        "- This tool does not determine compliance, provide legal advice, or infer whether a company actually follows its policy."
+        "- This tool does not determine compliance, provide legal advice, or infer whether a company actually follows its policy.\n"
+        "- Individual analyses are limited to 1,000,000 extracted characters."
     )
     st.caption(f"Maximum policy URL response size: {MAX_POLICY_BYTES // (1024 * 1024)} MB.")
