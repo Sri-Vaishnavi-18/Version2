@@ -14,7 +14,12 @@ import pandas as pd
 import streamlit as st
 
 from contract_lens.data import LABELS
-from contract_lens.inference import LABEL_DETAILS, ClausePredictor, analyze_text
+from contract_lens.inference import (
+    LABEL_DETAILS,
+    ClausePredictor,
+    analyze_text,
+    split_into_clauses,
+)
 from contract_lens.sources import extract_pdf_text, fetch_policy_url
 
 ROOT = Path(__file__).resolve().parent
@@ -66,6 +71,7 @@ st.markdown(
       --teal:#0c766d;--deep:#07574f;--lime:#c5ef7b}}
     html{{scroll-behavior:smooth}}
     .stApp{{background:var(--paper);color:var(--ink)}}
+    .stApp p,.stApp label{{color:var(--ink)}}
     [data-testid="stHeader"]{{background:transparent}}
     [data-testid="stToolbar"],#MainMenu,footer{{visibility:hidden}}
     .block-container{{max-width:1200px;padding:1.2rem 2rem 3rem}}
@@ -105,8 +111,17 @@ st.markdown(
     div.stButton>button:hover,div.stDownloadButton>button:hover{{background:#eaf5ed;
       border-color:#80b9a0;color:#093c35;transform:translateY(-1px)}}
     div.stButton>button[kind="primary"]{{background:linear-gradient(120deg,#0d756a,#14907a);
-      color:white;border:0;box-shadow:0 8px 20px rgba(12,118,109,.2)}}
-    div.stButton>button[kind="primary"]:hover{{background:#075b52;color:white}}
+      color:white;border:0;box-shadow:0 8px 20px rgba(12,118,109,.2);
+      background-size:180% 100%;animation:button-glow 6s ease infinite}}
+    div.stButton>button[kind="primary"]:hover{{background:#075b52;color:white;
+      box-shadow:0 12px 26px rgba(12,118,109,.28);transform:translateY(-2px)}}
+    [data-testid="stWidgetLabel"] p{{color:var(--ink)!important;font-weight:750}}
+    [data-testid="stTextArea"] textarea{{background:#252630!important;color:#f7f8fb!important;
+      border:1px solid #252630!important;border-radius:12px!important;min-height:190px;
+      padding:1rem!important;line-height:1.65;transition:border-color .2s,box-shadow .2s}}
+    [data-testid="stTextArea"] textarea::placeholder{{color:#b9bdc9!important;opacity:1}}
+    [data-testid="stTextArea"] textarea:focus{{border-color:#36a48f!important;
+      box-shadow:0 0 0 3px rgba(12,118,109,.18)!important}}
     div[data-testid="stMetric"]{{background:white;border:1px solid var(--line);
       padding:.9rem;border-radius:15px}}
     div[data-testid="stMetricValue"]{{color:var(--deep)}}
@@ -125,6 +140,7 @@ st.markdown(
     div[data-testid="stRadioGroup"] label[data-testid="stRadioOption"][data-selected="true"]{{
       background:#e7f3e9;border-color:#95c4a1}}
     @keyframes enter{{from{{opacity:0;transform:translateY(14px)}}to{{opacity:1;transform:translateY(0)}}}}
+    @keyframes button-glow{{0%,100%{{background-position:0% 50%}}50%{{background-position:100% 50%}}}}
     @media(max-width:720px){{.block-container{{padding:.7rem 1rem 2rem}}
       .hero{{min-height:390px;border-radius:20px;padding:1.5rem;background-position:58% center}}
       .feature-image img{{height:190px!important}}}}
@@ -250,7 +266,7 @@ if st.session_state["active_page"] == "Analyze Policy":
             "Add `bilstm_attention.pt` and `tokenizer.json` to enable analysis."
         )
 
-    with st.container(border=True):
+    with st.container():
         source = st.radio(
             "Policy source",
             ("Paste text", "Upload PDF/TXT", "Public policy URL"),
@@ -299,6 +315,11 @@ if st.session_state["active_page"] == "Analyze Policy":
                 document = url
                 if text:
                     st.success(f"Fetched {len(text):,} characters.")
+
+        if text:
+            st.caption(
+                f"{len(text):,} characters · {len(split_into_clauses(text)):,} sentences ready to analyze"
+            )
 
         fingerprint = hashlib.sha256(
             f"{document}\0bilstm_attention\0{text}".encode("utf-8")
