@@ -1,51 +1,153 @@
 from __future__ import annotations
 
+import base64
 import csv
 import hashlib
+import html
 import io
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from contract_lens.data import LABELS
 from contract_lens.inference import LABEL_DETAILS, ClausePredictor, analyze_text
-from contract_lens.sources import MAX_POLICY_BYTES, extract_pdf_text, fetch_policy_url
+from contract_lens.sources import extract_pdf_text, fetch_policy_url
 
-ARTIFACT_DIR = Path(os.environ.get("CONTRACT_LENS_ARTIFACTS", "artifacts"))
-MODEL_FILES = {
-    "BiLSTM + Attention": "bilstm_attention.pt",
-    "BiLSTM (no attention)": "bilstm.pt",
-    "TF-IDF + Logistic Regression": "tfidf_logistic_regression.joblib",
-}
-MODEL_KEYS = {
+ROOT = Path(__file__).resolve().parent
+ARTIFACTS = Path(os.environ.get("CONTRACT_LENS_ARTIFACTS", ROOT / "artifacts"))
+MODEL_NAMES = {
     "BiLSTM + Attention": "bilstm_attention",
-    "BiLSTM (no attention)": "bilstm",
+    "BiLSTM without Attention": "bilstm",
     "TF-IDF + Logistic Regression": "tfidf_logistic_regression",
 }
+MODEL_FILES = {
+    "bilstm_attention": "bilstm_attention.pt",
+    "bilstm": "bilstm.pt",
+    "tfidf_logistic_regression": "tfidf_logistic_regression.joblib",
+}
+HERO_IMAGE = ROOT / "img3.jpg"
+FEATURE_IMAGE = ROOT / "img1.jpg"
+SUPPORT_IMAGE = ROOT / "img2.avif"
+PAGE_OPTIONS = ("Analyze Policy", "Model Comparison")
 
-st.set_page_config(page_title="AI Contract Lens", page_icon="🔎", layout="wide")
-st.title("AI Contract Lens")
-st.caption(
-    "Evidence-linked review of privacy-policy clauses. This research prototype is not legal advice "
-    "and does not determine whether a policy complies with any law."
+st.set_page_config(
+    page_title="AI Contract Lens",
+    page_icon="🔎",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 
-def uploaded_text(uploaded_file) -> str:
-    content = uploaded_file.getvalue()
+def image_data_uri(path: Path) -> str:
+    """Read a repository image for use as a responsive CSS background."""
+    if not path.is_file():
+        return ""
+    suffix = path.suffix.lower()
+    mime_type = "image/avif" if suffix == ".avif" else "image/jpeg"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
+hero_image = image_data_uri(HERO_IMAGE)
+hero_background = (
+    f'url("{hero_image}")'
+    if hero_image
+    else "linear-gradient(120deg, #102b2a, #176c61)"
+)
+
+st.markdown(
+    f"""
+    <style>
+    :root{{--ink:#102b2a;--muted:#647570;--paper:#f7f8f5;--line:#e3eae5;
+      --teal:#0c766d;--deep:#07574f;--lime:#c5ef7b}}
+    html{{scroll-behavior:smooth}}
+    .stApp{{background:var(--paper);color:var(--ink)}}
+    [data-testid="stHeader"]{{background:transparent}}
+    [data-testid="stToolbar"],#MainMenu,footer{{visibility:hidden}}
+    .block-container{{max-width:1200px;padding:1.2rem 2rem 3rem}}
+    .brand{{font-size:1.08rem;font-weight:850;letter-spacing:-.04em;color:var(--ink);
+      margin:.3rem 0 1rem}}
+    .brand span{{display:inline-grid;place-items:center;width:34px;height:34px;margin-right:.55rem;
+      border-radius:11px;background:linear-gradient(135deg,var(--teal),#36a48f);color:white}}
+    .hero{{min-height:470px;display:flex;align-items:center;position:relative;overflow:hidden;
+      padding:clamp(1.7rem,5vw,4.3rem);border-radius:28px;color:white;
+      background-image:linear-gradient(90deg,rgba(7,24,25,.88) 0%,rgba(7,31,31,.69) 50%,
+        rgba(7,31,31,.18) 100%),{hero_background};
+      background-size:cover;background-position:center 43%;
+      box-shadow:0 25px 65px rgba(10,45,42,.2);animation:enter .7s ease both}}
+    .hero-copy{{max-width:690px}}
+    .eyebrow,.kicker{{text-transform:uppercase;letter-spacing:.14em;font-size:.74rem;font-weight:850}}
+    .eyebrow{{color:#d0f096}}
+    .hero h1{{color:#fff!important;font-size:clamp(2.8rem,7vw,6rem);line-height:.97;
+      letter-spacing:-.075em;font-weight:850;margin:1rem 0}}
+    .hero p{{max-width:39rem;color:#e0ece6;font-size:1.05rem;line-height:1.7}}
+    .kicker{{color:var(--teal);margin:0 0 .55rem}}
+    .section-title{{font-size:clamp(1.8rem,4vw,3rem);line-height:1.05;letter-spacing:-.055em;
+      font-weight:850;margin:.2rem 0 .7rem;color:var(--ink)}}
+    .muted{{color:var(--muted);line-height:1.7}}
+    .panel,.model-card,.feature-card{{height:100%;border:1px solid var(--line);border-radius:20px;
+      background:rgba(255,255,255,.92);padding:1.2rem;
+      box-shadow:0 12px 35px rgba(20,50,43,.05);transition:transform .2s,box-shadow .2s}}
+    .panel:hover,.model-card:hover,.feature-card:hover{{transform:translateY(-3px);
+      box-shadow:0 18px 42px rgba(20,50,43,.1)}}
+    .feature-image img{{height:285px!important;width:100%!important;object-fit:cover!important;
+      border-radius:17px}}
+    .support-image img{{height:125px!important;width:100%!important;object-fit:cover!important;
+      border-radius:15px}}
+    .stImage img{{border-radius:16px}}
+    div.stButton>button,div.stDownloadButton>button{{border-radius:12px;
+      border:1px solid #cfe1d7;color:#174b42;font-weight:750;background:white;
+      transition:all .18s ease}}
+    div.stButton>button:hover,div.stDownloadButton>button:hover{{background:#eaf5ed;
+      border-color:#80b9a0;color:#093c35;transform:translateY(-1px)}}
+    div.stButton>button[kind="primary"]{{background:linear-gradient(120deg,#0d756a,#14907a);
+      color:white;border:0;box-shadow:0 8px 20px rgba(12,118,109,.2)}}
+    div.stButton>button[kind="primary"]:hover{{background:#075b52;color:white}}
+    div[data-testid="stMetric"]{{background:white;border:1px solid var(--line);
+      padding:.9rem;border-radius:15px}}
+    div[data-testid="stMetricValue"]{{color:var(--deep)}}
+    div[data-testid="stExpander"]{{background:white;border:1px solid var(--line);border-radius:15px}}
+    .evidence{{white-space:normal;overflow-wrap:anywhere;line-height:1.8;font-size:1rem;
+      color:#183d35;padding:1rem;border-left:4px solid #78b899;border-radius:0 12px 12px 0;
+      background:#f2f8f3}}
+    .stTabs [data-baseweb="tab-list"]{{gap:.4rem;border-bottom:1px solid var(--line)}}
+    .stTabs [data-baseweb="tab"]{{height:3.2rem;padding:0 1.1rem;font-weight:750}}
+    .stTabs [aria-selected="true"]{{color:var(--teal)!important}}
+    div[data-testid="stRadioGroup"] [role="radiogroup"]{{gap:.5rem}}
+    div[data-testid="stRadioGroup"] label[data-testid="stRadioOption"]{{
+      padding:.55rem .9rem;border:1px solid var(--line);border-radius:999px;background:white}}
+    div[data-testid="stRadioGroup"] label[data-testid="stRadioOption"] p{{
+      color:var(--ink)!important;font-weight:700}}
+    div[data-testid="stRadioGroup"] label[data-testid="stRadioOption"][data-selected="true"]{{
+      background:#e7f3e9;border-color:#95c4a1}}
+    @keyframes enter{{from{{opacity:0;transform:translateY(14px)}}to{{opacity:1;transform:translateY(0)}}}}
+    @media(max-width:720px){{.block-container{{padding:.7rem 1rem 2rem}}
+      .hero{{min-height:390px;border-radius:20px;padding:1.5rem;background-position:58% center}}
+      .feature-image img{{height:190px!important}}}}
+    @media(prefers-reduced-motion:reduce){{*,*::before,*::after{{scroll-behavior:auto!important;
+      animation-duration:.01ms!important;transition-duration:.01ms!important}}}}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def uploaded_text(file) -> str:
+    content = file.getvalue()
     if len(content) > 20 * 1024 * 1024:
         raise ValueError("Uploaded files must be 20 MB or smaller.")
-    suffix = Path(uploaded_file.name).suffix.lower()
-    if suffix == ".txt":
+    suffix = Path(file.name).suffix.lower()
+    if suffix == ".pdf":
+        text = extract_pdf_text(content)
+    elif suffix == ".txt":
         try:
             text = content.decode("utf-8-sig").strip()
         except UnicodeDecodeError as error:
             raise ValueError("TXT uploads must use UTF-8 encoding.") from error
-    elif suffix == ".pdf":
-        text = extract_pdf_text(content)
     else:
         raise ValueError("Upload a PDF or plain-text (.txt) file.")
     if not text:
@@ -54,270 +156,336 @@ def uploaded_text(uploaded_file) -> str:
 
 
 @st.cache_resource(show_spinner=False)
-def get_predictor(artifact_dir: str, model_name: str) -> ClausePredictor:
-    return ClausePredictor(artifact_dir, model_name)
+def get_predictor(artifact_dir: str, model_key: str) -> ClausePredictor:
+    return ClausePredictor(artifact_dir, model_key)
 
 
 @st.cache_data(show_spinner=False)
-def read_metrics(artifact_dir: str) -> dict:
-    metrics_path = Path(artifact_dir) / "metrics.json"
-    if not metrics_path.is_file():
+def load_metrics(artifact_dir: str) -> dict:
+    path = Path(artifact_dir) / "metrics.json"
+    if not path.is_file():
         return {}
-    with metrics_path.open(encoding="utf-8") as file:
+    with path.open(encoding="utf-8") as file:
         return json.load(file)
 
 
-available_models = [
-    title
-    for title, filename in MODEL_FILES.items()
-    if (ARTIFACT_DIR / filename).is_file()
-]
-if available_models:
-    st.success(f"Trained model artifacts found in `{ARTIFACT_DIR}`.")
-else:
-    st.warning(
-        f"No trained model artifacts found in `{ARTIFACT_DIR}`. Train the project first "
-        "using the commands in README.md; analysis is disabled rather than using a placeholder."
-    )
+available_for_compare = {
+    key: (ARTIFACTS / filename).is_file() for key, filename in MODEL_FILES.items()
+}
+attention_ready = available_for_compare["bilstm_attention"] and (
+    ARTIFACTS / "tokenizer.json"
+).is_file()
 
-analysis_tab, evaluation_tab, about_tab = st.tabs(
-    ["Analyze a policy", "Model evaluation", "Data and limitations"]
+st.markdown(
+    '<div class="brand"><span aria-hidden="true">⌕</span>AI Contract Lens</div>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    """
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">Privacy policy intelligence</div>
+        <h1>See what’s in<br>the fine print.</h1>
+        <p>Turn dense policy language into clear, evidence-linked topics.
+        Review complete sentences, keep the context, and stay in control.</p>
+      </div>
+    </section>
+    """,
+    unsafe_allow_html=True,
 )
 
-with analysis_tab:
-    source_mode = st.radio(
-        "Policy source",
-        ["Paste text", "Upload PDF/TXT", "Public policy URL"],
-        horizontal=True,
+if st.button("Analyze a Contract  ↓", type="primary", key="hero_analyze"):
+    st.session_state["active_page"] = PAGE_OPTIONS[0]
+
+if "active_page" not in st.session_state:
+    st.session_state["active_page"] = PAGE_OPTIONS[0]
+st.radio(
+    "Project pages",
+    PAGE_OPTIONS,
+    horizontal=True,
+    key="active_page",
+    label_visibility="collapsed",
+)
+
+if st.session_state["active_page"] == "Analyze Policy":
+    st.markdown('<div id="analyzer"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="kicker">Policy analyzer</p>'
+        '<h2 class="section-title">Start with a document.<br>Finish with evidence.</h2>'
+        '<p class="muted">The primary classifier is the trained BiLSTM + Attention model. '
+        'Comparison models are available only on the Model Comparison page.</p>',
+        unsafe_allow_html=True,
     )
-    policy_text = ""
-    document_name = "pasted-policy"
-    if source_mode == "Paste text":
-        policy_text = st.text_area(
-            "Paste policy text",
-            height=220,
-            placeholder="Paste the Terms, Privacy Policy, or cookie notice text here.",
+
+    image_col, steps_col = st.columns([1, 1.15], gap="large", vertical_alignment="center")
+    with image_col:
+        if FEATURE_IMAGE.is_file():
+            with st.container(key="feature_image"):
+                st.image(
+                    str(FEATURE_IMAGE),
+                    caption="Keep the source wording close while you review.",
+                    use_container_width=True,
+                    alt="A person reviewing a document at a desk.",
+                )
+    with steps_col:
+        st.markdown(
+            '<div class="panel"><div class="kicker">A simple review flow</div>'
+            '<p><strong>1.</strong> Paste text, upload PDF/TXT, or fetch a public URL.</p>'
+            '<p><strong>2.</strong> Classify policy sentences with BiLSTM + Attention.</p>'
+            '<p><strong>3.</strong> Check complete evidence and export your findings.</p></div>',
+            unsafe_allow_html=True,
         )
-    elif source_mode == "Upload PDF/TXT":
-        upload = st.file_uploader("Choose a PDF or TXT file", type=["pdf", "txt"])
-        if upload is not None:
-            document_name = upload.name
-            try:
-                policy_text = uploaded_text(upload)
-                st.caption(f"Extracted {len(policy_text):,} characters from {upload.name}.")
-            except (ValueError, OSError) as error:
-                st.error(str(error))
-    else:
-        url = st.text_input("Public policy URL", placeholder="https://example.com/privacy")
-        if st.button("Fetch policy text"):
-            try:
-                with st.spinner("Fetching the public policy page..."):
-                    policy_text = fetch_policy_url(url)
-                st.session_state["fetched_policy_text"] = policy_text
-                st.session_state["fetched_policy_url"] = url
-            except (ValueError, OSError) as error:
-                st.error(str(error))
-        fetched_url = st.session_state.get("fetched_policy_url", "")
-        policy_text = (
-            st.session_state.get("fetched_policy_text", "") if url == fetched_url else ""
+        if SUPPORT_IMAGE.is_file():
+            with st.container(key="support_image"):
+                st.image(
+                    str(SUPPORT_IMAGE),
+                    caption="Designed for clear, human-led review.",
+                    use_container_width=True,
+                    alt="Supporting image for policy review.",
+                )
+
+    if not attention_ready:
+        st.warning(
+            f"BiLSTM + Attention checkpoint and tokenizer were not both found in `{ARTIFACTS}`. "
+            "Add `bilstm_attention.pt` and `tokenizer.json` to enable analysis."
         )
-        document_name = fetched_url if policy_text else url or "policy-url"
-        if policy_text:
-            st.caption(f"Fetched {len(policy_text):,} characters from {document_name}.")
 
-    if source_mode == "Public policy URL" and st.button("Clear fetched text"):
-        st.session_state.pop("fetched_policy_text", None)
-        st.session_state.pop("fetched_policy_url", None)
-        st.rerun()
-
-    if available_models:
-        selected_model = st.selectbox("Classifier", available_models, index=0)
-    else:
-        selected_model = None
-
-    analysis_key = hashlib.sha256(
-        f"{document_name}\0{selected_model}\0{policy_text}".encode("utf-8")
-    ).hexdigest()
-    if st.button("Analyze clauses", type="primary", disabled=not bool(available_models)):
-        st.session_state.pop("analysis_result", None)
-        st.session_state.pop("analysis_report", None)
-        if not policy_text.strip():
-            st.error("Provide policy text before running an analysis.")
+    with st.container(border=True):
+        source = st.radio(
+            "Policy source",
+            ("Paste text", "Upload PDF/TXT", "Public policy URL"),
+            horizontal=True,
+            key="source_choice",
+        )
+        text = ""
+        document = "pasted-policy"
+        if source == "Paste text":
+            text = st.text_area(
+                "Paste policy text",
+                height=190,
+                placeholder="Paste Terms, a Privacy Policy, or a cookie notice.",
+                key="policy_text",
+            )
+        elif source == "Upload PDF/TXT":
+            file = st.file_uploader("Choose a PDF or TXT file", type=("pdf", "txt"))
+            if file:
+                document = file.name
+                try:
+                    text = uploaded_text(file)
+                    st.caption(f"Extracted {len(text):,} characters.")
+                except (ValueError, OSError) as error:
+                    st.error(str(error))
         else:
-            try:
-                with st.spinner("Classifying clauses..."):
-                    predictor = get_predictor(
-                        str(ARTIFACT_DIR), MODEL_KEYS[selected_model]
-                    )
-                    result = analyze_text(policy_text, predictor)
-                report = {
-                    "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-                    "document": document_name,
-                    "model": selected_model,
-                    "disclaimer": (
-                        "Predictions are research outputs, not legal advice or a compliance decision. "
-                        "Scores are model probabilities and may be miscalibrated."
-                    ),
-                    "summary": result["summary"],
-                    "key_terms": result["key_terms"],
-                    "findings": result["findings"],
-                }
-                st.session_state["analysis_result"] = result
-                st.session_state["analysis_report"] = report
-                st.session_state["analysis_key"] = analysis_key
-            except (ValueError, OSError, RuntimeError) as error:
-                st.error(str(error))
+            url = st.text_input(
+                "Public policy URL",
+                placeholder="https://example.com/privacy",
+                key="policy_url",
+            )
+            fetch_col, clear_col = st.columns(2)
+            if fetch_col.button("Fetch policy", key="fetch_policy"):
+                try:
+                    with st.spinner("Fetching public policy text..."):
+                        st.session_state["fetched_text"] = fetch_policy_url(url)
+                        st.session_state["fetched_url"] = url
+                    st.rerun()
+                except (ValueError, OSError) as error:
+                    st.error(str(error))
+            if clear_col.button("Clear fetched text", key="clear_policy"):
+                st.session_state.pop("fetched_text", None)
+                st.session_state.pop("fetched_url", None)
+                st.rerun()
+            if url == st.session_state.get("fetched_url"):
+                text = st.session_state.get("fetched_text", "")
+                document = url
+                if text:
+                    st.success(f"Fetched {len(text):,} characters.")
 
-    result = (
-        st.session_state.get("analysis_result")
-        if st.session_state.get("analysis_key") == analysis_key
-        else None
-    )
-    report = (
-        st.session_state.get("analysis_report")
-        if st.session_state.get("analysis_key") == analysis_key
-        else None
-    )
-    if result and report:
-        st.subheader("Plain-English summary")
-        st.caption(
-            "These are topic counts and review prompts, not ratings of risk or legal compliance. "
-            "The classifier is forced to choose among seven topics and has no 'other/none' class."
-        )
-        summary_columns = st.columns(4)
+        fingerprint = hashlib.sha256(
+            f"{document}\0bilstm_attention\0{text}".encode("utf-8")
+        ).hexdigest()
+        if st.button(
+            "Analyze with BiLSTM + Attention",
+            type="primary",
+            use_container_width=True,
+            disabled=not attention_ready,
+            key="run_analysis",
+        ):
+            st.session_state.pop("analysis", None)
+            if not text.strip():
+                st.error("Provide policy text before running an analysis.")
+            else:
+                try:
+                    with st.spinner("Classifying complete policy sentences..."):
+                        predictor = get_predictor(str(ARTIFACTS), "bilstm_attention")
+                        result = analyze_text(text, predictor)
+                    report = {
+                        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+                        "document": document,
+                        "model": "bilstm_attention",
+                        "summary": result["summary"],
+                        "key_terms": result["key_terms"],
+                        "findings": result["findings"],
+                        "disclaimer": "Research prototype; not legal advice or a compliance decision.",
+                    }
+                    st.session_state["analysis"] = {
+                        "key": fingerprint,
+                        "result": result,
+                        "report": report,
+                    }
+                except (ValueError, OSError, RuntimeError) as error:
+                    st.error(str(error))
+
+    saved = st.session_state.get("analysis", {})
+    if saved.get("key") == fingerprint:
+        result = saved["result"]
+        report = saved["report"]
+        st.markdown("### Analysis overview")
+        metric_cols = st.columns(4)
         for index, label in enumerate(LABELS):
-            summary_columns[index % len(summary_columns)].metric(
+            metric_cols[index % 4].metric(
                 LABEL_DETAILS[label]["name"], result["category_counts"][label]
             )
-        for summary_item in result["summary"]:
-            st.write(f"- {summary_item}")
-        st.markdown("**Key terms appearing in the evidence:**")
-        st.write(", ".join(result["key_terms"]) if result["key_terms"] else "No configured key terms matched.")
+        chart = pd.DataFrame(
+            {
+                "Topic": [LABEL_DETAILS[label]["name"] for label in LABELS],
+                "Sentences": [result["category_counts"][label] for label in LABELS],
+            }
+        ).set_index("Topic")
+        st.bar_chart(chart, horizontal=True, color="#0c766d")
+        st.caption(
+            "Model scores are not calibrated certainty. The classifier must choose one of "
+            "the seven supported topics."
+        )
 
-        st.subheader("Clause findings and evidence")
-        st.caption("Evidence below is the source clause as supplied; model scores are not certainty.")
+        st.markdown("### Sentence findings")
         for index, finding in enumerate(result["findings"], start=1):
             with st.expander(
-                f"{index}. {finding['name']} — model score {finding['score']:.1%}"
+                f"{index:02d} · {finding['name']} · model score {finding['score']:.1%}"
             ):
-                st.markdown(f"**Plain English:** {finding['plain_english']}")
-                st.markdown(f"**Review prompt:** {finding['review_prompt']}")
+                st.write(f"**Plain English:** {finding['plain_english']}")
+                st.write(f"**Review prompt:** {finding['review_prompt']}")
+                if finding["key_terms"]:
+                    st.write("**Key terms:** " + ", ".join(finding["key_terms"]))
+                st.markdown("**Complete source sentence**")
                 st.markdown(
-                    "**Key terms in this clause:** "
-                    + (", ".join(finding["key_terms"]) or "No configured key terms matched.")
+                    f'<div class="evidence">{html.escape(finding["evidence"])}</div>',
+                    unsafe_allow_html=True,
                 )
-                st.markdown("**Original evidence:**")
-                st.code(finding["evidence"], language=None)
 
-        json_bytes = json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8")
         csv_buffer = io.StringIO()
-        writer = csv.DictWriter(
-            csv_buffer,
-            fieldnames=[
-                "label",
-                "name",
-                "score",
-                "plain_english",
-                "review_prompt",
-                "key_terms",
-                "evidence",
-            ],
-        )
+        fields = ("label", "name", "score", "plain_english", "review_prompt", "key_terms", "evidence")
+        writer = csv.DictWriter(csv_buffer, fieldnames=fields)
         writer.writeheader()
-        writer.writerows(result["findings"])
-        left, right = st.columns(2)
-        left.download_button(
+        for finding in result["findings"]:
+            writer.writerow({**finding, "key_terms": ", ".join(finding["key_terms"])})
+        json_col, csv_col = st.columns(2)
+        json_col.download_button(
             "Download JSON report",
-            data=json_bytes,
-            file_name="ai_contract_lens_report.json",
-            mime="application/json",
+            json.dumps(report, ensure_ascii=False, indent=2),
+            "ai_contract_lens_report.json",
+            "application/json",
+            use_container_width=True,
         )
-        right.download_button(
+        csv_col.download_button(
             "Download CSV findings",
-            data=csv_buffer.getvalue().encode("utf-8"),
-            file_name="ai_contract_lens_findings.csv",
-            mime="text/csv",
+            csv_buffer.getvalue().encode("utf-8"),
+            "ai_contract_lens_findings.csv",
+            "text/csv",
+            use_container_width=True,
         )
 
-with evaluation_tab:
-    metrics = read_metrics(str(ARTIFACT_DIR))
+elif st.session_state["active_page"] == "Model Comparison":
+    st.markdown('<div id="comparison"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="kicker">Model comparison</p>'
+        '<h2 class="section-title">How the classifiers compare.</h2>'
+        '<p class="muted">AI Contract Lens classifies policy clauses into seven OPP-115 topics. '
+        'The primary app uses BiLSTM + Attention; the other classifiers are benchmarks. '
+        'Cookie-banner heuristic labels are excluded from supervised training.</p>',
+        unsafe_allow_html=True,
+    )
+    metrics = load_metrics(str(ARTIFACTS))
     if not metrics:
-        st.info(
-            "No measured evaluation report is available yet. Train the models to generate "
-            "website-disjoint test metrics, confusion matrices, and error analysis."
-        )
+        st.info("No measured test metrics found. Include the completed training `metrics.json` artifact.")
     else:
-        st.markdown(
-            "All displayed values are measured on the held-out website test split. "
-            "Macro-F1 weights each class equally; class imbalance can make accuracy misleading."
-        )
         st.caption(
-            f"Device: {metrics['device']} · "
-            f"Train/validation/test rows: {metrics['split_sizes']} · "
-            f"Websites per split: {metrics['split_websites']}"
+            f"Website-disjoint test evaluation · Device: {metrics.get('device', 'not recorded')} · "
+            f"Rows: {metrics.get('split_sizes', {})} · Websites: {metrics.get('split_websites', {})}"
         )
-        for title, model_name in MODEL_KEYS.items():
-            model_metrics = metrics.get("models", {}).get(model_name)
-            if not model_metrics:
+        comparison_rows = []
+        for title, key in MODEL_NAMES.items():
+            scores = metrics.get("models", {}).get(key)
+            if scores:
+                comparison_rows.append(
+                    {
+                        "Model": title,
+                        "Accuracy": scores["accuracy"],
+                        "Macro-F1": scores["macro_f1"],
+                        "Weighted-F1": scores["weighted_f1"],
+                    }
+                )
+        if comparison_rows:
+            comparison = pd.DataFrame(comparison_rows).set_index("Model")
+            st.bar_chart(comparison, color=["#0c766d", "#7565e8", "#c5a647"])
+            st.dataframe(comparison.style.format("{:.3f}"), use_container_width=True)
+        else:
+            st.info("The metrics file contains no model scores.")
+
+    st.markdown("#### Individual model results")
+    model_tabs = st.tabs(list(MODEL_NAMES))
+    for tab, (title, key) in zip(model_tabs, MODEL_NAMES.items()):
+        with tab:
+            scores = metrics.get("models", {}).get(key) if metrics else None
+            available = available_for_compare[key]
+            if not available:
+                st.info(f"The trained `{MODEL_FILES[key]}` model artifact is not present.")
+            if not scores:
+                st.info("No measured test metrics are recorded for this model.")
                 continue
-            st.subheader(title)
-            columns = st.columns(4)
-            columns[0].metric("Accuracy", f"{model_metrics['accuracy']:.3f}")
-            columns[1].metric("Macro precision", f"{model_metrics['macro_precision']:.3f}")
-            columns[2].metric("Macro recall", f"{model_metrics['macro_recall']:.3f}")
-            columns[3].metric("Macro-F1", f"{model_metrics['macro_f1']:.3f}")
-            class_report = model_metrics["per_class"]
+
+            st.markdown(f"#### {title}")
+            kpi = st.columns(4)
+            for column, metric, label in zip(
+                kpi,
+                ("accuracy", "macro_precision", "macro_recall", "macro_f1"),
+                ("Accuracy", "Macro precision", "Macro recall", "Macro-F1"),
+            ):
+                column.metric(label, f"{scores[metric]:.3f}")
+            report = scores["per_class"]
             class_rows = [
                 {
-                    "Class": LABEL_DETAILS[label]["name"],
-                    "Precision": class_report[label]["precision"],
-                    "Recall": class_report[label]["recall"],
-                    "F1": class_report[label]["f1-score"],
-                    "Support": int(class_report[label]["support"]),
+                    "Topic": LABEL_DETAILS[label]["name"],
+                    "Precision": report[label]["precision"],
+                    "Recall": report[label]["recall"],
+                    "F1": report[label]["f1-score"],
+                    "Support": int(report[label]["support"]),
                 }
                 for label in LABELS
             ]
-            st.dataframe(class_rows, hide_index=True, use_container_width=True)
-
-            confusion_path = ARTIFACT_DIR / f"confusion_matrix_{model_name}.csv"
+            st.dataframe(
+                pd.DataFrame(class_rows).style.format(
+                    {"Precision": "{:.3f}", "Recall": "{:.3f}", "F1": "{:.3f}"}
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+            confusion_path = ARTIFACTS / f"confusion_matrix_{key}.csv"
             if confusion_path.is_file():
-                import pandas as pd
-
                 matrix = pd.read_csv(confusion_path, index_col=0)
                 matrix.index = [LABEL_DETAILS[label]["name"] for label in matrix.index]
                 matrix.columns = [LABEL_DETAILS[label]["name"] for label in matrix.columns]
-                st.markdown("**Confusion matrix** (rows: true class; columns: predicted class)")
+                st.caption("Confusion matrix · rows: actual topic; columns: predicted topic")
                 st.dataframe(matrix, use_container_width=True)
-            error_path = ARTIFACT_DIR / f"errors_{model_name}.csv"
+            error_path = ARTIFACTS / f"errors_{key}.csv"
             if error_path.is_file():
-                import pandas as pd
+                with st.expander("Inspect held-out classification errors"):
+                    errors = pd.read_csv(error_path)
+                    st.caption(f"{len(errors)} test clauses were misclassified.")
+                    if not errors.empty:
+                        st.dataframe(errors.head(20), hide_index=True, use_container_width=True)
 
-                errors = pd.read_csv(error_path)
-                st.markdown(f"**Held-out errors:** {len(errors)} misclassified clauses")
-                if not errors.empty:
-                    st.dataframe(errors.head(20), hide_index=True, use_container_width=True)
-
-with about_tab:
-    st.subheader("Training data")
-    st.write(
-        "Supervised labels come only from the supplied OPP-115 human annotations. The "
-        "prepared policy-clause CSV contains 17,567 rows before exact duplicate removal, "
-        "spanning 115 website IDs; its seven target labels were checked against the original "
-        "OPP-115 category names."
-    )
-    st.write(
-        "The separate cookie-banner CSV is not used for supervised training: every row is "
-        "marked `heuristic_from_observed_text_review_required`, and 122 rows have no label. "
-        "Those labels are not treated as human ground truth."
-    )
-    st.subheader("Limitations")
-    st.markdown(
-        "- OPP-115 policies were collected around 2015 and do not represent current policies or all jurisdictions.\n"
-        "- The target categories are mapped directly from OPP-115 categories; a predicted category is not a legal risk rating.\n"
-        "- The model must choose among the seven supported categories; there is no 'other/none' class, so out-of-scope text can be assigned the closest available topic.\n"
-        "- Clause-level classification can miss context, negation, exceptions, and layout or PDF extraction errors.\n"
-        "- Confidence scores are not calibrated and findings need human verification against the evidence shown.\n"
-        "- This tool does not determine compliance, provide legal advice, or infer whether a company actually follows its policy.\n"
-        "- Individual analyses are limited to 1,000,000 extracted characters."
-    )
-    st.caption(f"Maximum policy URL response size: {MAX_POLICY_BYTES // (1024 * 1024)} MB.")
+st.markdown(
+    '<div style="margin-top:2.4rem;padding-top:1rem;border-top:1px solid #e3eae5;'
+    'color:#647570;font-size:.85rem">AI Contract Lens · Research prototype · Not legal advice</div>',
+    unsafe_allow_html=True,
+)

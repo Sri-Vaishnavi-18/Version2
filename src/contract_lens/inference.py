@@ -51,6 +51,23 @@ LABEL_DETAILS = {
 
 MAX_TEXT_CHARACTERS = 1_000_000
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
+_PAGE_NUMBER_LINE = re.compile(r"(?:page\s+)?\d{1,4}", re.IGNORECASE)
+_ABBREVIATIONS = {
+    "e.g.",
+    "i.e.",
+    "etc.",
+    "inc.",
+    "ltd.",
+    "no.",
+    "vs.",
+    "dr.",
+    "mr.",
+    "mrs.",
+    "ms.",
+    "prof.",
+    "u.s.",
+    "u.k.",
+}
 _KEY_TERM_PATTERNS = (
     re.compile(r"\bpersonal\s+(?:information|data)\b", re.IGNORECASE),
     re.compile(r"\bsensitive\s+(?:information|data)\b", re.IGNORECASE),
@@ -69,11 +86,28 @@ _KEY_TERM_PATTERNS = (
 
 
 def split_into_clauses(text: str) -> list[str]:
-    """Split on paragraph and sentence boundaries while retaining source wording."""
+    """Join wrapped source lines, then return complete sentences as evidence units."""
     clauses: list[str] = []
-    for paragraph in text.splitlines():
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    paragraphs = re.split(r"\n[ \t]*\n+", normalized)
+    for paragraph in paragraphs:
+        lines = [
+            re.sub(r"(?<=[.!?])\s+\d{1,4}(?=\s|$)", "", line.strip())
+            for line in paragraph.splitlines()
+            if line.strip() and not _PAGE_NUMBER_LINE.fullmatch(line.strip())
+        ]
+        paragraph = " ".join(lines)
+        if not paragraph:
+            continue
         start = 0
         for match in _SENTENCE_BOUNDARY.finditer(paragraph):
+            if paragraph[match.start() - 1] == ".":
+                prefix = paragraph[: match.start()].rstrip()
+                word_match = re.search(r"(?:\b[A-Za-z](?:\.[A-Za-z])+|\b[A-Za-z]+)\.$", prefix)
+                if word_match:
+                    final_token = word_match.group(0).lower()
+                    if final_token in _ABBREVIATIONS or len(final_token) == 2:
+                        continue
             clause = paragraph[start : match.start()].strip()
             if clause:
                 clauses.append(clause)

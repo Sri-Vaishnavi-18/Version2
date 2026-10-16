@@ -6,12 +6,15 @@ It is not a legal service, a compliance checker, or a generative summarizer. The
 
 ## What is included
 
+- Professor/viva preparation, model theory and equations, comparison details, limitations, and likely questions: see [PROJECT_VIVA_GUIDE.md](./PROJECT_VIVA_GUIDE.md).
 - PDF/TXT upload, pasted policy text, and fetch of public HTTP/HTTPS policy pages.
 - Clause-level classification into seven privacy-practice topics.
-- Evidence-linked plain-English findings, literal key-term extraction from each clause, and JSON/CSV report export.
+- Evidence-linked plain-English findings with line-wrapped source text joined back into complete sentences, literal key-term extraction, and JSON/CSV report export.
 - Website-disjoint train/validation/test split, class-weighted neural training, metrics, confusion matrices, and held-out error analysis.
 - TF-IDF + Logistic Regression, BiLSTM without attention, and BiLSTM + attention, all trained from scratch on the supplied labels.
 - A Streamlit UI that requires and loads the trained artifacts; it never substitutes a mock prediction.
+- Supplied visual assets `img1.jpg`, `img3.jpg`, and `img2.avif` are used in the responsive frontend; keep them beside `app.py` when deploying.
+- The main analyzer uses BiLSTM + Attention only; the two baseline classifiers are isolated in the Model Comparison page, with one tab per model.
 
 ## Dataset inspection and label provenance
 
