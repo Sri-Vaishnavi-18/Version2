@@ -1,0 +1,10 @@
+-e .
+beautifulsoup4>=4.12
+joblib>=1.3
+pandas>=2.0
+pypdf>=4.2
+pytest>=8.0
+requests>=2.31
+scikit-learn>=1.3
+streamlit>=1.34
+torch>=2.2

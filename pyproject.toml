@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-contract-lens"
+version = "1.0.0"
+description = "Evidence-grounded privacy policy clause classification with BiLSTM attention"
+requires-python = ">=3.10"
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "joblib>=1.3",
+    "pandas>=2.0",
+    "pypdf>=4.2",
+    "requests>=2.31",
+    "scikit-learn>=1.3",
+    "streamlit>=1.34",
+    "torch>=2.2",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

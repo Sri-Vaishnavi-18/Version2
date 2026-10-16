@@ -1,0 +1,20 @@
+{
+  "labels": [
+    "data_collection",
+    "third_party_sharing",
+    "consent_choices",
+    "security_protection",
+    "retention_deletion",
+    "advertising_tracking",
+    "user_rights_opt_out"
+  ],
+  "source_category_mapping": {
+    "First Party Collection/Use": "data_collection",
+    "Third Party Sharing/Collection": "third_party_sharing",
+    "User Choice/Control": "consent_choices",
+    "Data Security": "security_protection",
+    "Data Retention": "retention_deletion",
+    "Do Not Track": "advertising_tracking",
+    "User Access, Edit and Deletion": "user_rights_opt_out"
+  }
+}
