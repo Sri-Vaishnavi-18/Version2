@@ -2,6 +2,7 @@ services:
   - type: web
     name: pactio
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health

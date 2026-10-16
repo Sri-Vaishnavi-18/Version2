@@ -87,10 +87,10 @@ python -m pytest
 
 ## Deploy Pactio to Render without installing npm locally
 
-The repository includes a Render Blueprint at `render.yaml` and a multi-stage `Dockerfile`. The Docker build gets Node/npm from its Node build image, runs the Vite production build, then packages the resulting static files with the Python API. You do **not** need npm on Windows, in Render's shell, or in a separate Render build command.
+The repository includes a Render Blueprint at `render.yaml` and a multi-stage `Dockerfile`. The Blueprint explicitly selects Render's **Free** web-service plan. The Docker build gets Node/npm from its Node build image, runs the Vite production build, then packages the resulting static files with the Python API. You do **not** need npm on Windows, in Render's shell, or in a separate Render build command.
 
 1. Push the project source, including `Dockerfile` and `render.yaml`, to GitHub. Do not commit `.venv`, datasets, or private policy text.
-2. In Render, select **New → Blueprint**, connect the GitHub repository, and deploy the Blueprint. Render reads `render.yaml` and builds the Docker image automatically.
+2. In Render, select **New → Blueprint**, connect the GitHub repository, and deploy the Blueprint. Confirm the service plan is **Free** before accepting. Render reads `render.yaml` and builds the Docker image automatically. If Render still asks for payment or shows a paid plan, stop before confirming; do not proceed with a paid service.
 3. In the created Render service, open **Environment → Secret Files** and add these two files from your trained `artifacts` folder:
    - `bilstm_attention.pt`
    - `tokenizer.json`
@@ -100,6 +100,8 @@ The repository includes a Render Blueprint at `render.yaml` and a multi-stage `D
 If deployment fails, check the Render deploy logs for Docker build errors, then the service logs for Python/model errors. If `/api/health` reports an error, confirm both secret filenames and the `CONTRACT_LENS_ARTIFACTS` path. The frontend and API are deployed together, so no separate npm service or CORS configuration is needed.
 
 This Render Docker path is for the React Pactio website. The older Streamlit comparison interface is a separate app and is not the entry point for the full Pactio design.
+
+Render's free web services may sleep after inactivity and have limited memory/compute; allow time for the first request to wake up. If the free instance runs out of memory while loading PyTorch, a larger plan would cost money, so don't upgrade unless you choose to pay for it.
 
 ## Train the models
 
