@@ -372,7 +372,7 @@ def train(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train and evaluate AI Contract Lens.")
+    parser = argparse.ArgumentParser(description="Train and evaluate Pactio policy classifiers.")
     parser.add_argument(
         "--data",
         type=Path,

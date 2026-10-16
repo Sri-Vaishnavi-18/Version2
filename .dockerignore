@@ -1,0 +1,19 @@
+.git
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.streamlit
+artifacts
+Datasets
+Working Prototype
+notebooks
+tests
+pactio-frontend/pactio-frontend/node_modules
+pactio-frontend/pactio-frontend/dist
+app.py
+src/ai_contract_lens.egg-info
+img1.jpg
+img2.avif
+img3.jpg
+Links.txt

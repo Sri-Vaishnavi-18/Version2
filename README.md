@@ -1,6 +1,6 @@
-# AI Contract Lens
+# Pactio
 
-AI Contract Lens is a research prototype for finding privacy-policy topics in user-provided text and showing the exact clause that triggered each prediction. It uses a from-scratch PyTorch BiLSTM with trainable embeddings and attention, compared with a BiLSTM without attention and TF-IDF + Logistic Regression.
+Pactio is the branded frontend for this research prototype. It finds privacy-policy topics in user-provided text and shows the exact clause that triggered each prediction. The primary classifier is a from-scratch PyTorch BiLSTM with trainable embeddings and attention, compared with a BiLSTM without attention and TF-IDF + Logistic Regression.
 
 It is not a legal service, a compliance checker, or a generative summarizer. The interface reports topic counts, plain-English descriptions, and review prompts; it does not assign a legal risk rating. Every finding includes the original input clause as evidence.
 
@@ -12,9 +12,9 @@ It is not a legal service, a compliance checker, or a generative summarizer. The
 - Evidence-linked plain-English findings with line-wrapped source text joined back into complete sentences, literal key-term extraction, and JSON/CSV report export.
 - Website-disjoint train/validation/test split, class-weighted neural training, metrics, confusion matrices, and held-out error analysis.
 - TF-IDF + Logistic Regression, BiLSTM without attention, and BiLSTM + attention, all trained from scratch on the supplied labels.
-- A Streamlit UI that requires and loads the trained artifacts; it never substitutes a mock prediction.
-- Supplied visual assets `img1.jpg`, `img3.jpg`, and `img2.avif` are used in the responsive frontend; keep them beside `app.py` when deploying.
-- The main analyzer uses BiLSTM + Attention only; the two baseline classifiers are isolated in the Model Comparison page, with one tab per model.
+- A responsive Pactio React frontend, served by FastAPI, with PDF/TXT upload, pasted text, public policy URL analysis, evidence views, and JSON/TXT exports.
+- The frontend is connected to the trained BiLSTM + Attention through `/api/analyze` and `/api/analyze-file`; it does not display mock results. Model comparison baselines remain available in the optional Streamlit research interface.
+- The supplied Pactio logo and visual assets are in `pactio-frontend/pactio-frontend/public/assets`.
 
 ## Dataset inspection and label provenance
 
@@ -36,7 +36,7 @@ The seven labels are a transparent relabeling of the available OPP-115 category 
 
 `Working Prototype/cookie_banners_prepared.csv` is not used as supervised training data. All its rows say `heuristic_from_observed_text_review_required`, and some labels are empty; these are not verified human ground truth.
 
-## Local setup (Windows PowerShell)
+## Run Pactio locally (Windows PowerShell)
 
 From the project root:
 
@@ -44,17 +44,64 @@ From the project root:
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e .
-python -m pip install pytest
+python -m pip install -e ".[test]"
 ```
 
-Python 3.10 or later is required. Install a PyTorch build compatible with your Python version and hardware if the default package resolution does not provide one.
+Python 3.10 or later is required for backend development. Node.js 20.19+ is needed only if you want to run/build the frontend locally; it is not needed on your computer to deploy with the Render Docker setup below. Install a PyTorch build compatible with your Python version and hardware if the default package resolution does not provide one.
 
-Run focused tests:
+For local frontend development, build the frontend:
+
+```powershell
+Set-Location pactio-frontend\pactio-frontend
+npm install
+npm run build
+Set-Location ..\..
+```
+
+Then start FastAPI from the repository root. It serves the built Pactio site and API from the same origin:
+
+```powershell
+python -m uvicorn api:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000`. Verify API readiness at `http://127.0.0.1:8000/api/health`; analysis requires `artifacts/bilstm_attention.pt` and `artifacts/tokenizer.json`. The service deliberately returns an error if trained artifacts are missing.
+
+For active frontend development, use Vite instead of building:
+
+```powershell
+Set-Location pactio-frontend\pactio-frontend
+Copy-Item .env.example .env
+npm install
+npm run dev
+```
+
+In a second PowerShell window, from the repository root, run `python -m uvicorn api:app --reload --port 8000`. Vite's `.env` points to the API at `http://localhost:8000`. The backend permits the Vite localhost origins for development. When building for same-origin deployment, do not set `VITE_API_BASE_URL`; the frontend will call the API on its own host.
+
+To run the older research/model-comparison interface, use `python -m streamlit run app.py`. To use a different artifact folder with either app, set `CONTRACT_LENS_ARTIFACTS` before launching it.
+
+Run the tests:
 
 ```powershell
 python -m pytest
 ```
+
+## Deploy Pactio to Render without installing npm locally
+
+The repository includes a Render Blueprint at `render.yaml` and a multi-stage `Dockerfile`. The Docker build gets Node/npm from its Node build image, runs the Vite production build, then packages the resulting static files with the Python API. You do **not** need npm on Windows, in Render's shell, or in a separate Render build command.
+
+1. Push the project source, including `Dockerfile` and `render.yaml`, to GitHub. Do not commit `.venv`, datasets, or private policy text.
+2. In Render, select **New → Blueprint**, connect the GitHub repository, and deploy the Blueprint. Render reads `render.yaml` and builds the Docker image automatically.
+3. In the created Render service, open **Environment → Secret Files** and add these two files from your trained `artifacts` folder:
+   - `bilstm_attention.pt`
+   - `tokenizer.json`
+   The Blueprint configures `CONTRACT_LENS_ARTIFACTS=/etc/secrets`, which is where Render makes secret files available. These two files must be from the same training run. The Streamlit comparison models and metric CSVs are not required by the Pactio website.
+4. Save the secret files and trigger a deploy/redeploy. Wait for the service health check to pass, then open its `onrender.com` URL. `/api/health` returns ready only after the checkpoint and matching tokenizer successfully load.
+
+If deployment fails, check the Render deploy logs for Docker build errors, then the service logs for Python/model errors. If `/api/health` reports an error, confirm both secret filenames and the `CONTRACT_LENS_ARTIFACTS` path. The frontend and API are deployed together, so no separate npm service or CORS configuration is needed.
+
+This Render Docker path is for the React Pactio website. The older Streamlit comparison interface is a separate app and is not the entry point for the full Pactio design.
+
+## Train the models
 
 Train all three models using the inspected prepared OPP-115 clauses:
 
@@ -69,14 +116,6 @@ python -m contract_lens.training `
 ```
 
 The split procedure uses only `website_id` groups, searches deterministic seeds to retain every target class in all three partitions, and verifies that group sets do not overlap. If it cannot make a valid split, training stops rather than producing incomplete or leaking evaluation results.
-
-Start the application after training:
-
-```powershell
-python -m streamlit run app.py
-```
-
-To use a different artifact folder, set `CONTRACT_LENS_ARTIFACTS` before launching Streamlit. The app needs the trained artifact folder; without it, analysis is disabled.
 
 ## Google Colab GPU training
 

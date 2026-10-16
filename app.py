@@ -37,11 +37,19 @@ MODEL_FILES = {
 HERO_IMAGE = ROOT / "img3.jpg"
 FEATURE_IMAGE = ROOT / "img1.jpg"
 SUPPORT_IMAGE = ROOT / "img2.avif"
+PACTIO_LOGO = (
+    ROOT
+    / "pactio-frontend"
+    / "pactio-frontend"
+    / "public"
+    / "assets"
+    / "pactio-cat.png"
+)
 PAGE_OPTIONS = ("Analyze Policy", "Model Comparison")
 
 st.set_page_config(
-    page_title="AI Contract Lens",
-    page_icon="🔎",
+    page_title="Pactio",
+    page_icon=PACTIO_LOGO,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -193,7 +201,7 @@ attention_ready = available_for_compare["bilstm_attention"] and (
 ).is_file()
 
 st.markdown(
-    '<div class="brand"><span aria-hidden="true">⌕</span>AI Contract Lens</div>',
+    '<div class="brand"><span aria-hidden="true">P</span>Pactio</div>',
     unsafe_allow_html=True,
 )
 st.markdown(
@@ -403,14 +411,14 @@ if st.session_state["active_page"] == "Analyze Policy":
         json_col.download_button(
             "Download JSON report",
             json.dumps(report, ensure_ascii=False, indent=2),
-            "ai_contract_lens_report.json",
+            "pactio_report.json",
             "application/json",
             use_container_width=True,
         )
         csv_col.download_button(
             "Download CSV findings",
             csv_buffer.getvalue().encode("utf-8"),
-            "ai_contract_lens_findings.csv",
+            "pactio_findings.csv",
             "text/csv",
             use_container_width=True,
         )
@@ -420,7 +428,7 @@ elif st.session_state["active_page"] == "Model Comparison":
     st.markdown(
         '<p class="kicker">Model comparison</p>'
         '<h2 class="section-title">How the classifiers compare.</h2>'
-        '<p class="muted">AI Contract Lens classifies policy clauses into seven OPP-115 topics. '
+        '<p class="muted">Pactio classifies policy clauses into seven OPP-115 topics. '
         'The primary app uses BiLSTM + Attention; the other classifiers are benchmarks. '
         'Cookie-banner heuristic labels are excluded from supervised training.</p>',
         unsafe_allow_html=True,
@@ -507,6 +515,6 @@ elif st.session_state["active_page"] == "Model Comparison":
 
 st.markdown(
     '<div style="margin-top:2.4rem;padding-top:1rem;border-top:1px solid #e3eae5;'
-    'color:#647570;font-size:.85rem">AI Contract Lens · Research prototype · Not legal advice</div>',
+    'color:#647570;font-size:.85rem">Pactio · Research prototype · Not legal advice</div>',
     unsafe_allow_html=True,
 )
