@@ -89,15 +89,20 @@ python -m pytest
 
 The repository includes a Render Blueprint at `render.yaml` and a multi-stage `Dockerfile`. The Blueprint explicitly selects Render's **Free** web-service plan. The Docker build gets Node/npm from its Node build image, runs the Vite production build, then packages the resulting static files with the Python API. You do **not** need npm on Windows, in Render's shell, or in a separate Render build command.
 
-1. Push the project source, including `Dockerfile` and `render.yaml`, to GitHub. Do not commit `.venv`, datasets, or private policy text.
-2. In Render, select **New → Blueprint**, connect the GitHub repository, and deploy the Blueprint. Confirm the service plan is **Free** before accepting. Render reads `render.yaml` and builds the Docker image automatically. If Render still asks for payment or shows a paid plan, stop before confirming; do not proceed with a paid service.
-3. In the created Render service, open **Environment → Secret Files** and add these two files from your trained `artifacts` folder:
-   - `bilstm_attention.pt`
-   - `tokenizer.json`
-   The Blueprint configures `CONTRACT_LENS_ARTIFACTS=/etc/secrets`, which is where Render makes secret files available. These two files must be from the same training run. The Streamlit comparison models and metric CSVs are not required by the Pactio website.
-4. Save the secret files and trigger a deploy/redeploy. Wait for the service health check to pass, then open its `onrender.com` URL. `/api/health` returns ready only after the checkpoint and matching tokenizer successfully load.
+1. Include only the two model files required by the deployed frontend. They are excluded by `.gitignore`, so force-add these specific files:
 
-If deployment fails, check the Render deploy logs for Docker build errors, then the service logs for Python/model errors. If `/api/health` reports an error, confirm both secret filenames and the `CONTRACT_LENS_ARTIFACTS` path. The frontend and API are deployed together, so no separate npm service or CORS configuration is needed.
+   ```powershell
+   git add -f artifacts/bilstm_attention.pt artifacts/tokenizer.json
+   ```
+
+   The checkpoint is a binary model file; it cannot be entered into Render's plaintext Secret Files editor. These trained model artifacts are not credentials, but anyone able to access the repository may download them. Do not force-add the other artifacts, datasets, or private policy text.
+2. Push the project source, including `Dockerfile`, `render.yaml`, and the two required model files, to GitHub. Do not commit `.venv`, datasets, or private policy text.
+3. In Render, select **New → Blueprint**, connect the GitHub repository, and deploy the Blueprint. Confirm the service plan is **Free** before accepting. Render reads `render.yaml` and builds the Docker image automatically. If Render still asks for payment or shows a paid plan, stop before confirming; do not proceed with a paid service.
+4. Wait for the service health check to pass, then open its `onrender.com` URL. `/api/health` returns ready only after the checkpoint and matching tokenizer successfully load.
+
+The checkpoint and tokenizer must come from the same training run. The Dockerfile copies them from `artifacts/` into the app image, so **do not add them under Render → Environment → Secret Files**. The Streamlit comparison models and metric CSVs are not required by the Pactio website.
+
+If deployment fails, check Render's Docker build logs: a `COPY artifacts/... not found` error means the matching files were not pushed to GitHub. The frontend and API are deployed together, so no separate npm service or CORS configuration is needed.
 
 This Render Docker path is for the React Pactio website. The older Streamlit comparison interface is a separate app and is not the entry point for the full Pactio design.
 

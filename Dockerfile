@@ -10,12 +10,14 @@ FROM python:3.11-slim AS application
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    CONTRACT_LENS_ARTIFACTS=/etc/secrets
+    CONTRACT_LENS_ARTIFACTS=/app/artifacts
 
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src/ ./src/
 COPY api.py ./
+COPY artifacts/bilstm_attention.pt ./artifacts/bilstm_attention.pt
+COPY artifacts/tokenizer.json ./artifacts/tokenizer.json
 RUN python -m pip install --no-cache-dir .
 
 COPY --from=frontend-build /build/pactio-frontend/dist ./pactio-frontend/pactio-frontend/dist

@@ -6,6 +6,3 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
-    envVars:
-      - key: CONTRACT_LENS_ARTIFACTS
-        value: /etc/secrets
